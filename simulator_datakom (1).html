@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataKom Simulator — Line Coding & Error Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+  :root {
+    --bg: #F7F6F1;
+    --bg2: #E6F0E9;
+    --bg3: #D8EAD9;
+    --bg4: #C2DBBF;
+    --surface: #FFFFFF;
+    --surface2: #F0F7F1;
+    --border: rgba(15,61,52,0.12);
+    --border2: rgba(15,61,52,0.25);
+    --accent: #134E43;
+    --accent2: #0F3D34;
+    --accent3: #0A2920;
+    --green: #134E43;
+    --amber: #C8A96A;
+    --red: #B94040;
+    --text: #0F3D34;
+    --text2: #3A6B5C;
+    --text3: #7FA896;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(247,246,241,0.95);
+    backdrop-filter: blur(16px);
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px;
+  }
+  .nav-logo { font-size: 15px; font-weight: 700; letter-spacing: 0.5px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .nav-logo span { color: var(--accent2); }
+  .nav-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text3); }
+  .nav-breadcrumb .crumb { color: var(--text2); cursor: pointer; }
+  .nav-breadcrumb .crumb:hover { color: var(--accent3); }
+  .nav-breadcrumb .sep { color: var(--text3); }
+  .nav-breadcrumb .active { color: var(--accent2); }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .tag-pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 0.5px solid var(--border2); color: var(--text3); }
+
+  /* SCREENS */
+  .screen { display: none; min-height: calc(100vh - 60px); }
+  .screen.active { display: block; }
+
+  /* HERO */
+  .hero {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100vh - 60px);
+    text-align: center; padding: 4rem 2rem;
+    position: relative; overflow: hidden;
+  }
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 80% 60% at center, black 30%, transparent 80%);
+  }
+  .hero-tag { font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--amber); background: rgba(200,169,106,0.12); border: 0.5px solid rgba(200,169,106,0.35); border-radius: 20px; padding: 4px 14px; margin-bottom: 2rem; display: inline-block; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1.1; margin-bottom: 1.25rem; letter-spacing: -0.5px; }
+  .hero h1 em { color: var(--accent2); font-style: normal; }
+  .hero p { font-size: 16px; color: var(--text2); max-width: 560px; line-height: 1.7; margin-bottom: 3rem; }
+  .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 680px; width: 100%; position: relative; z-index: 2; }
+  .mode-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 1.75rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .mode-card::before {
+    content: ''; position: absolute; inset: 0; border-radius: 16px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .mode-card.line::before { background: linear-gradient(135deg, rgba(15,61,52,0.08), transparent); }
+  .mode-card.error::before { background: linear-gradient(135deg, rgba(200,169,106,0.08), transparent); }
+  .mode-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+  .mode-card:hover::before { opacity: 1; }
+  .mode-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 1rem; }
+  .mode-card.line .mode-icon { background: rgba(15,61,52,0.1); color: var(--accent2); }
+  .mode-card.error .mode-icon { background: rgba(200,169,106,0.15); color: var(--amber); }
+  .mode-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+  .mode-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .mode-card .arrow { position: absolute; top: 1.75rem; right: 1.75rem; color: var(--text3); font-size: 18px; transition: transform 0.2s, color 0.2s; }
+  .mode-card:hover .arrow { color: var(--accent2); transform: translateX(3px); }
+  .hero-stats { display: flex; gap: 2.5rem; margin-top: 3rem; position: relative; z-index: 2; }
+  .hero-stat { text-align: center; }
+  .hero-stat .num { font-size: 24px; font-weight: 700; color: var(--accent2); }
+  .hero-stat .lbl { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .hero-credit { margin-top: 3rem; display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; z-index: 2; }
+  .hero-credit-line { width: 80px; height: 1px; background: linear-gradient(90deg, transparent, var(--amber), transparent); }
+  .hero-credit-text { font-size: 13px; color: var(--text3); letter-spacing: 0.3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .hero-credit-text strong { color: var(--text2); font-weight: 600; }
+  .credit-sep { color: var(--amber); font-weight: 700; }
+
+  /* TECHNIQUE SELECTION */
+  .page-header { padding: 2.5rem 2rem 0; max-width: 900px; margin: 0 auto; }
+  .page-header h2 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .page-header p { font-size: 14px; color: var(--text2); }
+  .back-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); cursor: pointer; margin-bottom: 1.5rem; transition: color 0.15s; }
+  .back-btn:hover { color: var(--accent3); }
+  .tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 1.5rem 2rem 2rem; max-width: 900px; margin: 0 auto; }
+  .tech-card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 12px; padding: 1.25rem; cursor: pointer;
+    transition: all 0.15s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .tech-card:hover { border-color: var(--border2); background: var(--surface2); transform: translateY(-1px); }
+  .tech-num { font-size: 11px; font-weight: 600; color: var(--text3); font-family: var(--mono); }
+  .tech-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .tech-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .tech-tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; width: fit-content; }
+  .tech-tag.polar { background: rgba(74,124,255,0.1); color: var(--accent3); border: 0.5px solid rgba(74,124,255,0.2); }
+  .tech-tag.bipolar { background: rgba(245,166,35,0.1); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.2); }
+  .tech-tag.block { background: rgba(62,207,160,0.1); color: var(--green); border: 0.5px solid rgba(62,207,160,0.2); }
+
+  /* MAIN SIMULATOR */
+  .sim-layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 60px); }
+  .sim-sidebar {
+    background: var(--bg2);
+    border-right: 0.5px solid var(--border);
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+  .sidebar-section { margin-bottom: 2rem; }
+  .sidebar-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text3); margin-bottom: 0.75rem; }
+  .sidebar-content { font-size: 13px; color: var(--text2); line-height: 1.8; }
+  .sidebar-content strong { color: var(--text); font-weight: 600; }
+  .sidebar-formula { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 12px; color: var(--accent3); margin-top: 8px; line-height: 1.7; }
+  .sidebar-tip { background: rgba(15,61,52,0.05); border-left: 2px solid var(--amber); border-radius: 0 6px 6px 0; padding: 10px 12px; margin-top: 10px; font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .sim-main { padding: 1.5rem 2rem; overflow-y: auto; }
+  .sim-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  .sim-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 1.75rem; }
+
+  /* INPUT ZONE */
+  .input-zone { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; }
+  .input-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+  .input-row:last-child { margin-bottom: 0; }
+  .input-label { font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.3px; }
+  .bit-input {
+    background: var(--bg3); border: 0.5px solid var(--border2);
+    border-radius: 8px; padding: 10px 14px;
+    font-family: var(--mono); font-size: 16px; font-weight: 600;
+    color: var(--text); letter-spacing: 4px; width: 100%;
+    outline: none; transition: border-color 0.15s;
+  }
+  .bit-input:focus { border-color: var(--accent); }
+  .bit-input::placeholder { color: var(--text3); letter-spacing: 2px; font-weight: 400; }
+  .run-btn {
+    background: var(--accent); color: white;
+    border: none; border-radius: 8px;
+    padding: 10px 24px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--sans);
+  }
+  .run-btn:hover { background: #1a6655; transform: translateY(-1px); }
+  .run-btn:active { transform: translateY(0) scale(0.98); }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sec-btn {
+    background: transparent; color: var(--text2);
+    border: 0.5px solid var(--border2); border-radius: 8px;
+    padding: 10px 18px; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; font-family: var(--sans);
+  }
+  .sec-btn:hover { background: var(--surface2); color: var(--text); }
+
+  /* WAVEFORM CANVAS */
+  .wave-wrap { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; }
+  .wave-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .wave-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .wave-legend { display: flex; gap: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  canvas.waveform { width: 100%; border-radius: 6px; display: block; }
+
+  /* STEPS */
+  .steps-wrap { }
+  .step-block {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 10px;
+    position: relative; overflow: hidden;
+  }
+  .step-block::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--accent);
+    border-radius: 3px 0 0 3px;
+  }
+  .step-block.success::before { background: var(--green); }
+  .step-block.warn::before { background: var(--amber); }
+  .step-block.err::before { background: var(--red); }
+  .step-num { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent2); margin-bottom: 4px; }
+  .step-block.success .step-num { color: var(--green); }
+  .step-block.warn .step-num { color: var(--amber); }
+  .step-block.err .step-num { color: var(--red); }
+  .step-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .step-body { font-size: 13px; color: var(--text2); line-height: 1.7; }
+  .step-body code { font-family: var(--mono); font-size: 13px; color: var(--accent3); background: rgba(74,124,255,0.08); padding: 1px 5px; border-radius: 4px; }
+  .step-body .bit-row { display: flex; gap: 3px; flex-wrap: wrap; margin: 8px 0; }
+  .step-body .bit {
+    width: 28px; height: 28px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    border: 0.5px solid var(--border);
+  }
+  .bit.b1 { background: rgba(74,124,255,0.15); color: var(--accent2); border-color: rgba(74,124,255,0.3); }
+  .bit.b0 { background: var(--bg3); color: var(--text3); }
+  .bit.highlight { background: rgba(62,207,160,0.2); color: var(--green); border-color: rgba(62,207,160,0.4); }
+  .bit.error-bit { background: rgba(255,92,92,0.2); color: var(--red); border-color: rgba(255,92,92,0.4); }
+  .conclusion-box {
+    background: rgba(62,207,160,0.07); border: 0.5px solid rgba(62,207,160,0.25);
+    border-radius: 10px; padding: 1rem 1.25rem; text-align: center;
+    margin-top: 1rem;
+  }
+  .conclusion-box.reject { background: rgba(255,92,92,0.07); border-color: rgba(255,92,92,0.25); }
+  .conclusion-box h4 { font-size: 15px; font-weight: 700; color: var(--green); margin-bottom: 4px; }
+  .conclusion-box.reject h4 { color: var(--red); }
+  .conclusion-box p { font-size: 13px; color: var(--text2); }
+
+  /* CRC LONG DIV */
+  .longdiv-wrap { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 8px; padding: 1rem; font-family: var(--mono); font-size: 13px; overflow-x: auto; }
+  .longdiv-row { display: flex; gap: 2px; align-items: center; padding: 2px 0; }
+  .longdiv-row.xor-row { border-top: 0.5px solid var(--border2); }
+  .longdiv-cell { width: 18px; text-align: center; color: var(--text2); }
+  .longdiv-cell.active { color: var(--accent2); font-weight: 600; }
+  .longdiv-cell.rem { color: var(--green); font-weight: 700; }
+  .longdiv-cell.div { color: var(--amber); }
+  .longdiv-label { font-size: 11px; color: var(--text3); margin-left: 8px; }
+
+  /* TABLE */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .data-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text3); border-bottom: 0.5px solid var(--border); }
+  .data-table td { padding: 8px 12px; border-bottom: 0.5px solid var(--border); color: var(--text2); }
+  .data-table td:first-child { font-family: var(--mono); color: var(--text); }
+  .data-table tr.highlight-row td { background: rgba(74,124,255,0.05); }
+
+  /* ANIMATIONS */
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  /* MOBILE */
+  @media (max-width: 700px) {
+    .sim-layout { grid-template-columns: 1fr; }
+    .sim-sidebar { display: none; }
+    .mode-grid { grid-template-columns: 1fr; }
+    .tech-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* UTILS */
+  .mt1 { margin-top: 0.75rem; }
+  .mt2 { margin-top: 1.25rem; }
+  .flex-center { display: flex; align-items: center; gap: 8px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+  .badge.ok { background: rgba(62,207,160,0.12); color: var(--green); border: 0.5px solid rgba(62,207,160,0.25); }
+  .badge.ng { background: rgba(255,92,92,0.12); color: var(--red); border: 0.5px solid rgba(255,92,92,0.25); }
+  .badge.info { background: rgba(74,124,255,0.12); color: var(--accent3); border: 0.5px solid rgba(74,124,255,0.25); }
+  .sep-line { height: 0.5px; background: var(--border); margin: 1.25rem 0; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo"><i class="ti ti-cpu-2" style="font-size:20px;color:var(--accent2)"></i> DataKom <span>Simulator</span></div>
+  <div class="nav-breadcrumb" id="breadcrumb"></div>
+  <div class="nav-right">
+    <div class="tag-pill">PTM — Dasar Komunikasi dan Telekomunikasi Data</div>
+  </div>
+</nav>
+
+<!-- SCREEN 1: HERO -->
+<div class="screen active" id="screen-home">
+  <div class="hero">
+    <div class="hero-grid"></div>
+    <div class="hero-tag">Simulator Interaktif</div>
+    <h1>Komunikasi Data<br>&amp; <em>Deteksi Error</em></h1>
+    <p>Pelajari dan simulasikan teknik <strong>line coding</strong> serta <strong>deteksi error</strong> secara visual dengan langkah demi langkah.</p>
+
+    <div class="mode-grid">
+      <div class="mode-card line" onclick="goToTechSelect('linecoding')">
+        <div class="mode-icon"><i class="ti ti-wave-sine"></i></div>
+        <i class="ti ti-arrow-right arrow" aria-hidden="true"></i>
+        <h3>Line Coding</h3>
+        <p>9 teknik pengkodean sinyal: Unipolar, NRZ, RZ, AMI, Manchester, B8ZS, HDB3</p>
+      </div>
+      <div class="mode-card error" onclick="goToTechSelect('errordetect')">
+        <div class="mode-icon"><i class="ti ti-shield-check"></i></div>
+        <i class="ti ti-arrow-right arrow" aria-hidden="true"></i>
+        <h3>Deteksi Error</h3>
+        <p>3 teknik: CRC dengan pembagian XOR, Checksum 1's complement, Hamming Code</p>
+      </div>
+    </div>
+
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">9</div><div class="lbl">Line Coding</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">Error Detection</div></div>
+      <div class="hero-stat"><div class="num">∞</div><div class="lbl">Percobaan</div></div>
+    </div>
+
+    <div class="hero-credit">
+      <div class="hero-credit-line"></div>
+      <div class="hero-credit-text">
+        Dibuat oleh <strong>Erlangga Ahmad Wijaya</strong>
+        <span class="credit-sep">—</span>
+        NIM <strong>25050630044</strong>
+        <span class="credit-sep">—</span>
+        Kelas <strong>F</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 2: TECHNIQUE SELECT -->
+<div class="screen" id="screen-select">
+  <div class="page-header">
+    <div class="back-btn" onclick="goHome()"><i class="ti ti-arrow-left" style="font-size:14px"></i> Kembali ke Menu</div>
+    <h2 id="select-title">Pilih Teknik</h2>
+    <p id="select-desc">Klik salah satu teknik untuk memulai simulasi</p>
+  </div>
+  <div class="tech-grid" id="tech-grid"></div>
+</div>
+
+<!-- SCREEN 3: SIMULATOR -->
+<div class="screen" id="screen-sim">
+  <div class="sim-layout">
+    <aside class="sim-sidebar" id="sim-sidebar">
+      <!-- dynamic -->
+    </aside>
+    <main class="sim-main">
+      <div class="back-btn" onclick="goBack()"><i class="ti ti-arrow-left" style="font-size:14px"></i> Pilih Teknik Lain</div>
+      <div class="sim-title" id="sim-title"></div>
+      <div class="sim-subtitle" id="sim-subtitle"></div>
+      <div id="sim-input-zone"></div>
+      <div id="sim-output-zone"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+let currentMode = '';
+let currentTech = '';
+
+// ===== NAVIGATION =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goHome() {
+  showScreen('screen-home');
+  setBreadcrumb([]);
+}
+
+function goBack() {
+  goToTechSelect(currentMode);
+}
+
+function setBreadcrumb(parts) {
+  const bc = document.getElementById('breadcrumb');
+  if (!parts.length) { bc.innerHTML = ''; return; }
+  bc.innerHTML = parts.map((p,i) => {
+    if (i < parts.length-1) return `<span class="crumb" onclick="${p.fn}">${p.label}</span><span class="sep">›</span>`;
+    return `<span class="active">${p.label}</span>`;
+  }).join('');
+}
+
+// ===== TECH DEFINITIONS =====
+const lineTechs = [
+  { id:'unipolar', name:'Unipolar NRZ', desc:'Sinyal positif untuk 1, nol volt untuk 0. Metode paling sederhana.', tag:'polar', num:'01' },
+  { id:'nrzl', name:'NRZ-L', desc:'Non-Return to Zero Level. Level tegangan menentukan bit langsung.', tag:'polar', num:'02' },
+  { id:'nrzi', name:'NRZ-I', desc:'Perubahan sinyal di awal bit 1, tidak ada perubahan untuk bit 0.', tag:'polar', num:'03' },
+  { id:'rz', name:'Return to Zero (RZ)', desc:'Sinyal kembali ke nol di tengah setiap bit periode.', tag:'polar', num:'04' },
+  { id:'ami', name:'Bipolar AMI', desc:'Alternating Mark Inversion: bit 1 bergantian +/−, bit 0 tetap nol.', tag:'bipolar', num:'05' },
+  { id:'manchester', name:'Manchester', desc:'Transisi di tengah bit: turun=1, naik=0. Digunakan Ethernet 10Base-T.', tag:'polar', num:'06' },
+  { id:'diffmanchester', name:'Differential Manchester', desc:'Transisi awal bit menandai 0, tidak ada transisi = 1.', tag:'polar', num:'07' },
+  { id:'b8zs', name:'B8ZS', desc:'Bipolar 8-Zero Substitution: ganti 8 nol berturut dengan pola khusus.', tag:'block', num:'08' },
+  { id:'hdb3', name:'HDB3', desc:'High Density Bipolar 3: ganti 4 nol berturut dengan B00V atau 000V.', tag:'block', num:'09' },
+];
+
+const errorTechs = [
+  { id:'crc', name:'CRC', desc:'Cyclic Redundancy Check: pembagian XOR polinomial step-by-step + verifikasi penerima.',tag:'block', num:'01' },
+  { id:'checksum', name:'Checksum', desc:"Penjumlahan 1's complement. Verifikasi: jumlah data + checksum = semua 1.", tag:'polar', num:'02' },
+  { id:'hamming', name:'Hamming Code', desc:'Encode otomatis + deteksi & koreksi 1-bit error menggunakan Syndrome Word.', tag:'bipolar', num:'03' },
+];
+
+function goToTechSelect(mode) {
+  currentMode = mode;
+  const isLine = mode === 'linecoding';
+  const techs = isLine ? lineTechs : errorTechs;
+  document.getElementById('select-title').textContent = isLine ? 'Line Coding — Pilih Teknik' : 'Deteksi Error — Pilih Teknik';
+  document.getElementById('select-desc').textContent = isLine
+    ? '9 teknik pengkodean saluran komunikasi digital'
+    : '3 teknik pendeteksian dan koreksi error';
+  const grid = document.getElementById('tech-grid');
+  grid.innerHTML = techs.map(t => `
+    <div class="tech-card" onclick="openSim('${t.id}')">
+      <div class="tech-num">${t.num}</div>
+      <div class="tech-name">${t.name}</div>
+      <div class="tech-desc">${t.desc}</div>
+    </div>
+  `).join('');
+  showScreen('screen-select');
+  setBreadcrumb([
+    { label:'Home', fn:'goHome()' },
+    { label: isLine ? 'Line Coding' : 'Deteksi Error' }
+  ]);
+}
+
+function openSim(techId) {
+  currentTech = techId;
+  const techs = currentMode === 'linecoding' ? lineTechs : errorTechs;
+  const tech = techs.find(t => t.id === techId);
+  document.getElementById('sim-title').innerHTML = `<i class="ti ti-${currentMode==='linecoding'?'wave-sine':'shield-check'}" style="color:var(--accent2)"></i> ${tech.name}`;
+  document.getElementById('sim-subtitle').textContent = tech.desc;
+  renderSidebar(techId);
+  renderInputZone(techId);
+  document.getElementById('sim-output-zone').innerHTML = '';
+  showScreen('screen-sim');
+  setBreadcrumb([
+    { label:'Home', fn:'goHome()' },
+    { label: currentMode==='linecoding'?'Line Coding':'Deteksi Error', fn:`goToTechSelect('${currentMode}')` },
+    { label: tech.name }
+  ]);
+}
+
+// ===== SIDEBAR MATERIAL =====
+const sidebarMaterial = {
+  unipolar: { title:'Unipolar NRZ', body:`<strong>Konsep:</strong> Hanya menggunakan satu level tegangan positif.<br><br><strong>Aturan encoding:</strong><br>• Bit <code>1</code> → tegangan +V<br>• Bit <code>0</code> → tegangan 0V<br><br><strong>Kekurangan:</strong> Tidak sinkron (DC component tinggi), rentan noise.`, formula:'1 → +V\n0 → 0V', tip:'Teknik paling sederhana tapi jarang dipakai di jaringan nyata karena tidak sinkron.' },
+  nrzl: { title:'NRZ-L (Level)', body:`<strong>Konsep:</strong> Level tegangan menentukan nilai bit secara langsung.<br><br><strong>Aturan encoding:</strong><br>• Bit <code>1</code> → tegangan rendah (−V)<br>• Bit <code>0</code> → tegangan tinggi (+V)<br><br><em>Note:</em> Implementasi umum: 0 = high, 1 = low (aktif low).`, formula:'1 → −V (LOW)\n0 → +V (HIGH)', tip:'NRZ-L digunakan di RS-232. Perhatikan bahwa 1 dan 0 bisa dibalik tergantung standar.' },
+  nrzi: { title:'NRZ-I (Inverted)', body:`<strong>Konsep:</strong> Transisi sinyal terjadi di awal periode bit <code>1</code>. Bit <code>0</code> tidak mengubah sinyal.<br><br><strong>Aturan encoding:</strong><br>• Bit <code>1</code> → sinyal berubah (toggle)<br>• Bit <code>0</code> → sinyal tetap sama`, formula:'1 → toggle level\n0 → pertahankan level', tip:'Digunakan USB. Karena berbasis transisi, lebih tahan noise saat transmisi.' },
+  rz: { title:'Return to Zero (RZ)', body:`<strong>Konsep:</strong> Sinyal kembali ke nol di tengah setiap periode bit.<br><br><strong>Aturan encoding:</strong><br>• Bit <code>1</code> → +V lalu kembali ke 0<br>• Bit <code>0</code> → −V lalu kembali ke 0<br><br><strong>Keunggulan:</strong> Self-clocking — penerima dapat sinkronisasi.`, formula:'1 → +V → 0\n0 → −V → 0', tip:'Bandwidth yang dibutuhkan 2× NRZ, tapi memiliki sinkronisasi otomatis.' },
+  ami: { title:'Bipolar AMI', body:`<strong>Konsep:</strong> Alternating Mark Inversion.<br><br><strong>Aturan encoding:</strong><br>• Bit <code>0</code> → tegangan 0V<br>• Bit <code>1</code> → bergantian +V dan −V<br><br><strong>Keunggulan:</strong> Tidak ada DC component, mudah deteksi error (dua +V berturut = error).`, formula:'0 → 0V\n1 → +V / −V (bergantian)', tip:'AMI digunakan di T1/E1. Error bisa terdeteksi jika muncul dua bit sama berurutan.' },
+  manchester: { title:'Manchester', body:`<strong>Konsep:</strong> Setiap bit memiliki transisi di tengah periode (self-clocking).<br><br><strong>Aturan encoding (IEEE 802.3):</strong><br>• Bit <code>1</code> → High→Low (↓)<br>• Bit <code>0</code> → Low→High (↑)`, formula:'1 → ↓ (transisi turun)\n0 → ↑ (transisi naik)', tip:'Digunakan Ethernet 10Base-T. Kelemahan: bandwidth 2× NRZ.' },
+  diffmanchester: { title:'Differential Manchester', body:`<strong>Konsep:</strong> Berdasarkan ada/tidaknya transisi di <em>awal</em> bit, bukan di tengah.<br><br><strong>Aturan encoding:</strong><br>• Bit <code>0</code> → transisi di awal bit<br>• Bit <code>1</code> → TIDAK ada transisi di awal bit<br><br>Selalu ada transisi di tengah bit (untuk clocking).`, formula:'0 → transisi di awal\n1 → tidak ada transisi', tip:'Token Ring menggunakan Differential Manchester. Lebih tahan terhadap polaritas terbalik.' },
+  b8zs: { title:'B8ZS', body:`<strong>Konsep:</strong> Bipolar 8-Zero Substitution. Menggantikan 8 nol berturut-turut dengan pola khusus.<br><br><strong>Pola substitusi:</strong><br>Jika bit AMI terakhir adalah <strong>+V</strong>: ganti dengan <code>000+−0−+</code><br>Jika bit AMI terakhir adalah <strong>−V</strong>: ganti dengan <code>000−+0+−</code>`, formula:'000+−0−+ (setelah +V)\n000−+0+− (setelah −V)', tip:'B8ZS digunakan di T1 Amerika Utara. Pola "violation" sengaja melanggar aturan AMI untuk deteksi.' },
+  hdb3: { title:'HDB3', body:`<strong>Konsep:</strong> High Density Bipolar 3. Gantikan 4 nol berturut-turut.<br><br><strong>Aturan substitusi:</strong><br>Jika bit 1 terakhir <strong>genap</strong>: ganti <code>0000</code> → <code>B00V</code><br>Jika bit 1 terakhir <strong>ganjil</strong>: ganti <code>0000</code> → <code>000V</code><br><br>B = pulsa normal (ikuti AMI), V = violation (sama dengan sebelumnya).`, formula:'genap → B00V\nganjil → 000V', tip:'HDB3 digunakan di E1 (Eropa). Lebih sering muncul di praktikum daripada B8ZS.' },
+  crc: { title:'CRC', body:`<strong>Proses TX:</strong><br>1. Tambah (n-1) bit nol di akhir data<br>2. Bagi dengan divisor menggunakan XOR<br>3. Sisa (remainder) = FCS, kirim data+FCS<br><br><strong>Proses RX:</strong><br>1. Bagi data+FCS dengan divisor yang sama<br>2. Jika sisa = 0 → Accept, jika ≠ 0 → Reject`, formula:'FCS = Data mod Divisor\nVerif: (Data+FCS) mod D = 0', tip:'CRC jauh lebih akurat dari Checksum. Digunakan di Ethernet, Wi-Fi, Bluetooth, ZIP.' },
+  checksum: { title:'Checksum', body:`<strong>Proses TX:</strong><br>1. Bagi data menjadi blok k-bit<br>2. Jumlahkan semua blok (1's complement addition)<br>3. Komplemen hasil = Checksum, kirim bersama data<br><br><strong>Proses RX:</strong><br>1. Jumlahkan data + checksum<br>2. Hasil harus = semua 1 (0xFF)<br>3. Komplemen = 0 → Accept`, formula:'CS = ~(seg1 + seg2 + ...)\nVerif: sum + CS → ~result = 0', tip:"End-Around Carry: jika hasil penjumlahan >8bit, bit ke-9 dijumlahkan ke LSB." },
+  hamming: { title:'Hamming Code', body:`<strong>Parameter (data 8-bit):</strong><br>• n = 12 bit (block code)<br>• k = 8 bit (data)<br>• Check bits = 4 (posisi 1,2,4,8)<br><br><strong>Proses Encode (TX):</strong><br>1. Hitung C1,C2,C4,C8 dengan XOR<br>2. Sisipkan di posisi pangkat 2<br><br><strong>Proses Decode (RX):</strong><br>1. Hitung ulang check bits<br>2. XOR dengan yang diterima = Syndrome Word<br>3. Nilai = posisi bit error`, formula:'C1=D1⊕D2⊕D4⊕D5⊕D7\nC2=D1⊕D3⊕D4⊕D6⊕D7\nC4=D2⊕D3⊕D4⊕D8\nC8=D5⊕D6⊕D7⊕D8', tip:'Hamming(12,8) dapat mendeteksi DAN mengoreksi 1-bit error tanpa retransmisi.' },
+};
+
+function renderSidebar(techId) {
+  const mat = sidebarMaterial[techId] || {};
+  document.getElementById('sim-sidebar').innerHTML = `
+    <div class="sidebar-section">
+      <div class="sidebar-label">Materi</div>
+      <div class="sidebar-content">${mat.body || ''}</div>
+    </div>
+    ${mat.formula ? `<div class="sidebar-section">
+      <div class="sidebar-label">Formula / Aturan</div>
+      <div class="sidebar-formula">${mat.formula}</div>
+    </div>` : ''}
+    ${mat.tip ? `<div class="sidebar-section">
+      <div class="sidebar-label">Catatan Penting</div>
+      <div class="sidebar-tip">${mat.tip}</div>
+    </div>` : ''}
+  `;
+}
+
+// ===== INPUT ZONES =====
+function renderInputZone(techId) {
+  const zone = document.getElementById('sim-input-zone');
+  if (['unipolar','nrzl','nrzi','rz','ami','manchester','diffmanchester','b8zs','hdb3'].includes(techId)) {
+    zone.innerHTML = `
+      <div class="input-zone">
+        <div class="input-row">
+          <div class="input-label">Bit Stream (contoh: 10110010)</div>
+          <input class="bit-input" id="inp-bits" placeholder="01001001" maxlength="16" value="10110010">
+        </div>
+        <div class="btn-row">
+          <button class="run-btn" onclick="runLineCoding()"><i class="ti ti-player-play" aria-hidden="true"></i> Jalankan Simulasi</button>
+          <button class="sec-btn" onclick="document.getElementById('inp-bits').value='10110010';runLineCoding()">Contoh Default</button>
+        </div>
+      </div>`;
+  } else if (techId === 'crc') {
+    zone.innerHTML = `
+      <div class="input-zone">
+        <div class="input-row">
+          <div class="input-label">Data (pesan asli)</div>
+          <input class="bit-input" id="inp-data" placeholder="1010101010" value="110101" maxlength="20">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Divisor (pola / generator polynomial)</div>
+          <input class="bit-input" id="inp-div" placeholder="10011" value="1011" maxlength="12">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Data yang diterima (RX — biarkan kosong untuk auto)</div>
+          <input class="bit-input" id="inp-rx" placeholder="kosongkan untuk auto" maxlength="28">
+        </div>
+        <div class="btn-row">
+          <button class="run-btn" onclick="runCRC()"><i class="ti ti-player-play" aria-hidden="true"></i> Jalankan CRC</button>
+          <button class="sec-btn" onclick="resetCRC()">Reset Contoh</button>
+        </div>
+      </div>`;
+  } else if (techId === 'checksum') {
+    zone.innerHTML = `
+      <div class="input-zone">
+        <div class="input-row">
+          <div class="input-label">Segmen 1 (8-bit)</div>
+          <input class="bit-input" id="cs-s1" value="10110011" maxlength="8">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Segmen 2 (8-bit)</div>
+          <input class="bit-input" id="cs-s2" value="01101100" maxlength="8">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Segmen 3 (8-bit)</div>
+          <input class="bit-input" id="cs-s3" value="11001010" maxlength="8">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Segmen 4 (8-bit)</div>
+          <input class="bit-input" id="cs-s4" value="00110101" maxlength="8">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Checksum RX (kosong = hitung otomatis)</div>
+          <input class="bit-input" id="cs-rx" placeholder="kosongkan untuk auto" maxlength="8">
+        </div>
+        <div class="btn-row">
+          <button class="run-btn" onclick="runChecksum()"><i class="ti ti-player-play" aria-hidden="true"></i> Jalankan Checksum</button>
+          <button class="sec-btn" onclick="loadChecksumExample()">Reset Contoh</button>
+        </div>
+      </div>`;
+  } else if (techId === 'hamming') {
+    zone.innerHTML = `
+      <div class="input-zone">
+        <div class="input-row">
+          <div class="input-label">Data 8-bit untuk di-encode (D8…D1, MSB ke LSB)</div>
+          <input class="bit-input" id="ham-data" value="10110101" maxlength="8">
+        </div>
+        <div class="input-row">
+          <div class="input-label">Data 12-bit yang diterima RX (kosong = transmisi tanpa error)</div>
+          <input class="bit-input" id="ham-rx" placeholder="kosongkan untuk auto" maxlength="12">
+        </div>
+        <div class="btn-row">
+          <button class="run-btn" onclick="runHamming()"><i class="ti ti-player-play" aria-hidden="true"></i> Encode + Deteksi Error</button>
+          <button class="sec-btn" onclick="resetHamming()">Reset Contoh</button>
+        </div>
+      </div>`;
+  }
+}
+
+// ===== LINE CODING ENGINE =====
+function runLineCoding() {
+  const bits = document.getElementById('inp-bits').value.replace(/[^01]/g,'');
+  if (!bits || bits.length < 2) { alert('Masukkan minimal 2 bit (0 dan 1).'); return; }
+  const out = document.getElementById('sim-output-zone');
+  out.innerHTML = '';
+
+  let levels = [];
+  let steps = [];
+
+  switch(currentTech) {
+    case 'unipolar': [levels, steps] = encodeUnipolar(bits); break;
+    case 'nrzl': [levels, steps] = encodeNRZL(bits); break;
+    case 'nrzi': [levels, steps] = encodeNRZI(bits); break;
+    case 'rz': [levels, steps] = encodeRZ(bits); break;
+    case 'ami': [levels, steps] = encodeAMI(bits); break;
+    case 'manchester': [levels, steps] = encodeManchester(bits); break;
+    case 'diffmanchester': [levels, steps] = encodeDiffManchester(bits); break;
+    case 'b8zs': [levels, steps] = encodeB8ZS(bits); break;
+    case 'hdb3': [levels, steps] = encodeHDB3(bits); break;
+  }
+
+  out.innerHTML = `
+    <div class="wave-wrap fade-in">
+      <div class="wave-header">
+        <div class="wave-title"><i class="ti ti-wave-sine" style="font-size:16px;color:var(--accent2);margin-right:6px"></i>Bentuk Gelombang</div>
+        <div class="wave-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>+V</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--bg4)"></div>0V</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>−V</div>
+        </div>
+      </div>
+      <canvas class="waveform" id="waveCanvas" height="120"></canvas>
+    </div>
+    <div class="steps-wrap fade-in">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-size:10px;">Langkah Encoding</div>
+      ${steps.map((s,i) => `
+        <div class="step-block">
+          <div class="step-num">Langkah ${i+1}</div>
+          <div class="step-title">${s.title}</div>
+          <div class="step-body">${s.body}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  setTimeout(() => drawWaveform(levels, bits), 50);
+}
+
+function drawWaveform(levels, bits) {
+  const canvas = document.getElementById('waveCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.parentElement.clientWidth * dpr;
+  canvas.height = 120 * dpr;
+  canvas.style.height = '120px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = canvas.parentElement.clientWidth;
+  const H = 120;
+  ctx.clearRect(0,0,W,H);
+
+  // Background
+  ctx.fillStyle = '#D8EAD9';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(15,61,52,0.06)';
+  ctx.lineWidth = 0.5;
+  const centerY = H/2;
+  for (let y=0; y<H; y+=20) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(15,61,52,0.15)';
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(0,centerY); ctx.lineTo(W,centerY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bit labels
+  const n = bits.length;
+  const slotW = W / n;
+  ctx.font = `600 11px JetBrains Mono, monospace`;
+  bits.split('').forEach((b,i) => {
+    const x = i * slotW + slotW/2;
+    ctx.fillStyle = 'rgba(127,168,150,0.6)';
+    ctx.textAlign = 'center';
+    ctx.fillText(b, x, H-4);
+    if (i>0) {
+      ctx.strokeStyle = 'rgba(15,61,52,0.08)';
+      ctx.beginPath(); ctx.moveTo(i*slotW,0); ctx.lineTo(i*slotW,H-16); ctx.stroke();
+    }
+  });
+
+  // Waveform
+  function lvl2y(v) {
+    if (v > 0.5) return centerY - 30;
+    if (v < -0.5) return centerY + 30;
+    return centerY;
+  }
+
+  ctx.strokeStyle = '#C8A96A';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = '#C8A96A';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  levels.forEach((seg, i) => {
+    const x1 = (i / levels.length) * W;
+    const x2 = ((i+1) / levels.length) * W;
+    const y = lvl2y(seg);
+    const yPrev = i > 0 ? lvl2y(levels[i-1]) : y;
+    if (i === 0) { ctx.moveTo(x1, y); }
+    else if (y !== yPrev) { ctx.lineTo(x1, yPrev); ctx.lineTo(x1, y); }
+    ctx.lineTo(x2, y);
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// === ENCODING ALGORITHMS ===
+function encodeUnipolar(bits) {
+  const n = bits.length;
+  const levels = [];
+  const steps = [{ title: 'Aturan Unipolar NRZ', body: 'Bit <code>1</code> → +V, Bit <code>0</code> → 0V. Tidak ada perubahan di tengah bit.' }];
+  bits.split('').forEach((b,i) => { levels.push(b==='1'?1:0); });
+  steps.push({ title:'Hasil Encoding', body:`<div class="bit-row">${bits.split('').map(b=>`<div class="bit ${b==='1'?'b1':'b0'}">${b}</div>`).join('')}</div>Output: ${bits.split('').map(b=>b==='1'?'+V':'0V').join(' | ')}` });
+  return [levels, steps];
+}
+
+function encodeNRZL(bits) {
+  const levels = bits.split('').map(b => b==='1' ? -1 : 1);
+  const steps = [
+    { title:'Aturan NRZ-L', body:'Bit <code>0</code> → +V (High), Bit <code>1</code> → −V (Low). Level tegangan langsung mewakili nilai bit.' },
+    { title:'Hasil Encoding', body:`<div class="bit-row">${bits.split('').map(b=>`<div class="bit ${b==='1'?'b1':'b0'}">${b}</div>`).join('')}</div>Output: ${bits.split('').map(b=>b==='1'?'−V':'+V').join(' | ')}` }
+  ];
+  return [levels, steps];
+}
+
+function encodeNRZI(bits) {
+  let cur = 1;
+  const levels = [];
+  const rows = [];
+  bits.split('').forEach((b,i) => {
+    if (b==='1') cur = cur*-1;
+    levels.push(cur);
+    rows.push(`Bit[${i}]=${b}: ${b==='1'?'Toggle →':'Tetap →'} ${cur>0?'+V':'−V'}`);
+  });
+  const steps = [
+    { title:'Aturan NRZ-I', body:'Bit <code>1</code> = sinyal berubah (toggle). Bit <code>0</code> = sinyal tetap. Dimulai dari level +V.' },
+    { title:'Proses Bit per Bit', body:rows.map(r=>`<code>${r}</code>`).join('<br>') },
+    { title:'Hasil Encoding', body:`<div class="bit-row">${bits.split('').map((b,i)=>`<div class="bit ${b==='1'?'b1':'b0'}">${b}</div>`).join('')}</div>` }
+  ];
+  return [levels, steps];
+}
+
+function encodeRZ(bits) {
+  const levels = [];
+  bits.split('').forEach(b => { levels.push(b==='1'?1:-1); levels.push(0); });
+  const steps = [
+    { title:'Aturan Return-to-Zero', body:'Setiap bit memiliki 2 segmen: <br>Bit <code>1</code>: setengah pertama +V, setengah kedua 0V<br>Bit <code>0</code>: setengah pertama −V, setengah kedua 0V' },
+    { title:'Hasil Encoding', body:`<div class="bit-row">${bits.split('').map(b=>`<div class="bit ${b==='1'?'b1':'b0'}">${b}</div>`).join('')}</div>Bandwidth = 2× NRZ, tetapi self-clocking.` }
+  ];
+  return [levels, steps];
+}
+
+function encodeAMI(bits) {
+  let last = 1;
+  const levels = [];
+  const rows = [];
+  bits.split('').forEach((b,i) => {
+    if (b==='0') { levels.push(0); rows.push(`Bit[${i}]=0 → 0V`); }
+    else { const v = last; levels.push(v); last = -last; rows.push(`Bit[${i}]=1 → ${v>0?'+V':'−V'}`); }
+  });
+  const steps = [
+    { title:'Aturan Bipolar AMI', body:'Bit <code>0</code> = 0V. Bit <code>1</code> = bergantian +V dan −V (AMI = Alternating Mark Inversion).' },
+    { title:'Proses Bit per Bit', body:rows.map(r=>`<code>${r}</code>`).join('<br>') }
+  ];
+  return [levels, steps];
+}
+
+function encodeManchester(bits) {
+  const levels = [];
+  bits.split('').forEach(b => { if (b==='1') { levels.push(1); levels.push(-1); } else { levels.push(-1); levels.push(1); } });
+  const steps = [
+    { title:'Aturan Manchester (IEEE 802.3)', body:'Transisi di <strong>tengah</strong> setiap bit:<br>Bit <code>1</code>: High→Low (↓)<br>Bit <code>0</code>: Low→High (↑)<br>Self-clocking — penerima mudah sinkronisasi.' },
+    { title:'Hasil Encoding', body:`<div class="bit-row">${bits.split('').map(b=>`<div class="bit ${b==='1'?'b1':'b0'}">${b}</div>`).join('')}</div>Digunakan di Ethernet 10Base-T.` }
+  ];
+  return [levels, steps];
+}
+
+function encodeDiffManchester(bits) {
+  let cur = 1;
+  const levels = [];
+  const rows = [];
+  bits.split('').forEach((b,i) => {
+    if (b==='0') { cur = -cur; }
+    rows.push(`Bit[${i}]=${b}: ${b==='0'?'Transisi di awal':'Tidak ada transisi di awal'} → ${cur>0?'+V':'−V'}`);
+    levels.push(cur); levels.push(-cur);
+  });
+  const steps = [
+    { title:'Aturan Differential Manchester', body:'Bit <code>0</code> = ada transisi di awal bit.<br>Bit <code>1</code> = tidak ada transisi di awal bit.<br>Selalu ada transisi di tengah (untuk clocking).' },
+    { title:'Proses Bit per Bit', body:rows.map(r=>`<code>${r}</code>`).join('<br>') }
+  ];
+  return [levels, steps];
+}
+
+function encodeB8ZS(bits) {
+  const amiLevels = [];
+  let last = 1;
+  bits.split('').forEach(b => { if (b==='0') amiLevels.push(0); else { amiLevels.push(last); last=-last; } });
+
+  const finalLevels = [...amiLevels];
+  const rows = [];
+  let i = 0;
+  let lastV = 1;
+  while (i < bits.length) {
+    if (bits.substring(i,i+8) === '00000000') {
+      const pat = lastV > 0 ? [0,0,0,1,-1,0,-1,1] : [0,0,0,-1,1,0,1,-1];
+      finalLevels.splice(i,8,...pat);
+      rows.push(`Posisi ${i}–${i+7}: 8 nol → substitusi ${lastV>0?'000+−0−+':'000−+0+−'}`);
+      i+=8;
+    } else {
+      if (amiLevels[i] !== 0) lastV = amiLevels[i];
+      i++;
+    }
+  }
+  const steps = [
+    { title:'Aturan B8ZS', body:'Encoding AMI normal, kecuali jika terjadi 8 nol berturut-turut, gantikan dengan pola khusus yang mengandung "violation" (pelanggaran AMI).' },
+    rows.length ? { title:'Substitusi yang Dilakukan', body: rows.map(r=>`<code>${r}</code>`).join('<br>') || 'Tidak ada 8 nol berturut-turut ditemukan.' } : { title:'Tidak ada substitusi', body:'Tidak ada 8 nol berturut-turut dalam bit stream ini.' }
+  ];
+  return [finalLevels, steps];
+}
+
+function encodeHDB3(bits) {
+  const rows = [];
+  const finalLevels = [];
+  let lastPulse = 1;
+  let oneCount = 0;
+  const rawAMI = [];
+  bits.split('').forEach(b => { if (b==='0') rawAMI.push(0); else { rawAMI.push(lastPulse); lastPulse=-lastPulse; } });
+
+  const seq = bits.split('');
+  let i = 0, lp = 1, oc = 0;
+  while (i < seq.length) {
+    if (seq.substring ? seq.slice(i,i+4).join('') === '0000' : seq.slice(i,i+4).join('') === '0000') {
+      const isEven = (oc % 2 === 0);
+      let sub;
+      if (isEven) { sub = [lp,-lp,0,-lp]; sub[0]=lp; sub[1]=0; sub[2]=0; sub[3]=-lp; lp=-lp; }
+      else { sub = [0,0,0,lp]; lp=-lp; }
+      finalLevels.push(...sub);
+      rows.push(`Posisi ${i}–${i+3}: 4 nol, ${oc} ones sebelumnya (${isEven?'genap→B00V':'ganjil→000V'}) → ${sub.map(v=>v>0?'+':v<0?'−':'0').join('')}`);
+      i+=4;
+    } else {
+      if (seq[i]==='0') { finalLevels.push(0); }
+      else { finalLevels.push(lp); oc++; lp=-lp; }
+      i++;
+    }
+  }
+  const steps = [
+    { title:'Aturan HDB3', body:'AMI normal, kecuali 4 nol berturut-turut digantikan dengan B00V atau 000V, tergantung jumlah bit-1 sebelum substitusi (genap/ganjil).' },
+    { title:'Substitusi HDB3', body: rows.length ? rows.map(r=>`<code>${r}</code>`).join('<br>') : 'Tidak ada 4 nol berturut-turut dalam bit stream ini.' }
+  ];
+  return [finalLevels, steps];
+}
+
+// ===== CRC ENGINE =====
+function resetCRC() {
+  document.getElementById('inp-data').value = '110101';
+  document.getElementById('inp-div').value = '1011';
+  document.getElementById('inp-rx').value = '';
+  document.getElementById('sim-output-zone').innerHTML = '';
+}
+
+/* Modulo-2 XOR division — correct implementation */
+function xorDivide(dividend, divisor) {
+  const steps = [];
+  const dvLen = divisor.length;
+  // Work on char array
+  let bits = dividend.split('');
+
+  for (let i = 0; i <= bits.length - dvLen; i++) {
+    // Skip if leading bit is 0 (XOR with 0s = no change; just record)
+    if (bits[i] === '0') {
+      steps.push({
+        top: bits.slice(i, i + dvLen).join(''),
+        bot: '0'.repeat(dvLen),
+        res: bits.slice(i + 1, i + dvLen).join(''),
+        note: 'MSB = 0, XOR dengan 000…'
+      });
+      continue; // bits unchanged, slide to next position
+    }
+    // XOR with divisor
+    const top = bits.slice(i, i + dvLen).join('');
+    const xored = top.split('').map((b, j) => (parseInt(b) ^ parseInt(divisor[j])).toString());
+    const resStr = xored.slice(1).join(''); // drop leading 0
+    steps.push({ top, bot: divisor, res: resStr, note: 'XOR dengan divisor' });
+    // Write back XOR result (keep original bits beyond window)
+    for (let j = 0; j < dvLen; j++) bits[i + j] = xored[j];
+  }
+
+  // Remainder = last (dvLen-1) bits
+  const rem = bits.slice(bits.length - (dvLen - 1)).join('');
+  return { steps, remainder: rem };
+}
+
+function runCRC() {
+  const data = document.getElementById('inp-data').value.replace(/[^01]/g,'');
+  const div = document.getElementById('inp-div').value.replace(/[^01]/g,'');
+  const rxInput = document.getElementById('inp-rx').value.replace(/[^01]/g,'');
+  if (!data || !div || div.length < 2) { alert('Data dan Divisor harus diisi dengan bit valid.'); return; }
+  if (div[0] !== '1') { alert('Divisor harus diawali dengan bit 1.'); return; }
+
+  const n = div.length - 1;
+  const paddedData = data + '0'.repeat(n);
+  const { steps, remainder } = xorDivide(paddedData, div);
+  const fcs = remainder;
+  const transmitted = data + fcs;
+
+  // RX verification
+  let rxData = rxInput || transmitted;
+  const { steps: rxSteps, remainder: rxRem } = xorDivide(rxData, div);
+  const accepted = rxRem === '0'.repeat(n);
+
+  const out = document.getElementById('sim-output-zone');
+  out.innerHTML = `
+  <div class="steps-wrap fade-in">
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 1</div>
+      <div class="step-title">Persiapan &amp; Padding</div>
+      <div class="step-body">
+        Data asli: <code>${data}</code> (${data.length} bit)<br>
+        Divisor (generator): <code>${div}</code> → derajat = ${n}, padding = ${n} bit nol<br>
+        Data setelah padding: <code>${paddedData}</code> (${paddedData.length} bit)
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 2</div>
+      <div class="step-title">Pembagian XOR Modulo-2 (step-by-step)</div>
+      <div class="step-body">
+        <div class="longdiv-wrap">
+          <div style="margin-bottom:6px;color:var(--text3);font-size:11px">Dividend: <span style="color:var(--text)">${paddedData}</span> &nbsp;÷&nbsp; Divisor: <span style="color:var(--amber)">${div}</span></div>
+          ${steps.map((s,i)=>`
+            <div class="longdiv-row" style="margin-bottom:4px">
+              <span style="font-size:11px;color:var(--text3);min-width:24px">${i+1}.</span>
+              <span style="color:var(--text)">${s.top}</span>
+              <span style="color:var(--text3);margin:0 6px">⊕</span>
+              <span style="color:var(--amber)">${s.bot}</span>
+              <span style="color:var(--text3);margin:0 6px">=</span>
+              <span style="color:var(--accent2)">0${s.res}</span>
+              <span class="longdiv-label">${s.note}</span>
+            </div>
+          `).join('')}
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border2)">
+            Remainder / FCS: <span style="color:var(--green);font-weight:700;font-family:var(--mono)">${fcs}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 3</div>
+      <div class="step-title">Frame yang Dikirim</div>
+      <div class="step-body">Data + FCS = <code>${data}</code> + <code style="color:var(--green)">${fcs}</code> = <code style="color:var(--green);font-size:15px">${transmitted}</code></div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">RX — Langkah 4</div>
+      <div class="step-title">Verifikasi: Bagi Frame Diterima dengan Divisor yang Sama</div>
+      <div class="step-body">
+        Frame diterima: <code>${rxData}</code><br>
+        <div class="longdiv-wrap" style="margin-top:8px">
+          ${rxSteps.map((s,i)=>`
+            <div class="longdiv-row" style="margin-bottom:4px">
+              <span style="font-size:11px;color:var(--text3);min-width:24px">${i+1}.</span>
+              <span style="color:var(--text)">${s.top}</span>
+              <span style="color:var(--text3);margin:0 6px">⊕</span>
+              <span style="color:var(--amber)">${s.bot}</span>
+              <span style="color:var(--text3);margin:0 6px">=</span>
+              <span style="color:var(--accent2)">0${s.res}</span>
+            </div>
+          `).join('')}
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border2)">
+            Remainder verifikasi: <span style="font-weight:700;font-family:var(--mono);color:${accepted?'var(--green)':'var(--red)'}">${rxRem}</span>
+            ${accepted?'<span class="badge ok" style="margin-left:8px">= 0 ✓ Valid</span>':'<span class="badge ng" style="margin-left:8px">≠ 0 ✗ Error</span>'}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="conclusion-box ${accepted?'':'reject'}">
+      <h4>${accepted ? '✓ ACCEPT DATA' : '✗ REJECT DATA'}</h4>
+      <p>${accepted ? 'Remainder = 0 → Tidak ada error. Frame diterima.' : `Remainder = ${rxRem} ≠ 0 → Error terdeteksi. Frame ditolak.`}</p>
+    </div>
+  </div>`;
+}
+
+// ===== CHECKSUM ENGINE =====
+function loadChecksumExample() {
+  document.getElementById('cs-s1').value = '10110011';
+  document.getElementById('cs-s2').value = '01101100';
+  document.getElementById('cs-s3').value = '11001010';
+  document.getElementById('cs-s4').value = '00110101';
+  document.getElementById('cs-rx').value = '';
+  document.getElementById('sim-output-zone').innerHTML = '';
+}
+
+function bin8ToInt(s) { return parseInt(s,2); }
+function intToBin8(n) { return (n & 0xFF).toString(2).padStart(8,'0'); }
+function onesCompAdd(a, b) {
+  let sum = a + b;
+  if (sum > 0xFF) sum = (sum & 0xFF) + 1;
+  return sum;
+}
+function complement8(n) { return (~n) & 0xFF; }
+
+function runChecksum() {
+  const segs = ['cs-s1','cs-s2','cs-s3','cs-s4'].map(id => document.getElementById(id).value.replace(/[^01]/g,'').slice(0,8).padStart(8,'0'));
+  const rxcs = document.getElementById('cs-rx').value.replace(/[^01]/g,'').slice(0,8);
+
+  const ints = segs.map(bin8ToInt);
+  let sum = ints[0];
+  const addSteps = [];
+  addSteps.push({ label:'Segmen 1', val:ints[0], binResult: intToBin8(ints[0]), carry:false });
+  for (let i=1; i<ints.length; i++) {
+    const prev = sum;
+    const raw = prev + ints[i];
+    const carry = raw > 0xFF;
+    if (carry) sum = (raw & 0xFF) + 1; else sum = raw;
+    addSteps.push({ label:`+ Segmen ${i+1}`, val:ints[i], binResult:intToBin8(sum), carry, rawBin:intToBin8(raw & 0xFF), raw });
+  }
+  const cs = complement8(sum);
+  const csBin = intToBin8(cs);
+
+  // Verification
+  let rxCSInt;
+  if (rxcs) { rxCSInt = bin8ToInt(rxcs); } else { rxCSInt = cs; }
+  const verSum = onesCompAdd(sum, rxCSInt);
+  const complement = complement8(verSum);
+  const accepted = complement === 0;
+
+  const out = document.getElementById('sim-output-zone');
+  out.innerHTML = `
+  <div class="steps-wrap fade-in">
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 1</div>
+      <div class="step-title">Data Segmen (k=4, m=8)</div>
+      <div class="step-body">
+        <table class="data-table" style="margin-top:6px">
+          <tr><th>Segmen</th><th>Biner</th><th>Desimal</th></tr>
+          ${segs.map((s,i)=>`<tr><td>Segmen ${i+1}</td><td><code>${s}</code></td><td>${bin8ToInt(s)}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 2</div>
+      <div class="step-title">Penjumlahan 1's Complement (End-Around Carry)</div>
+      <div class="step-body">
+        ${addSteps.map(s=>`
+          <div style="margin:4px 0"><code style="color:var(--text2)">${s.label}: ${intToBin8(s.val)}</code>${s.carry?`<span class="badge info" style="margin-left:8px">Carry! → ${s.rawBin} + 1</span>`:''}</div>
+          <div style="font-size:13px;color:var(--accent3);font-family:var(--mono);padding:2px 0 6px 12px">Hasil sementara: ${s.binResult}</div>
+        `).join('')}
+        <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border2)">Sum Akhir: <code style="color:var(--amber)">${intToBin8(sum)}</code> (${sum})</div>
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 3</div>
+      <div class="step-title">Checksum = Komplemen-1 dari Sum</div>
+      <div class="step-body">Balikkan semua bit: <code>${intToBin8(sum)}</code> → <code style="color:var(--green)">${csBin}</code><br>Checksum dikirim bersama data.</div>
+    </div>
+    <div class="step-block ${accepted?'success':'err'}">
+      <div class="step-num">RX — Verifikasi</div>
+      <div class="step-title">Jumlahkan Data + Checksum yang Diterima</div>
+      <div class="step-body">
+        Sum data: <code>${intToBin8(sum)}</code> + Checksum RX: <code>${intToBin8(rxCSInt)}</code><br>
+        Hasil: <code>${intToBin8(verSum)}</code><br>
+        Komplemen: <code>${intToBin8(complement)}</code>
+        ${complement===0 ? '<span class="badge ok" style="margin-left:8px">= 0 ✓ Valid</span>' : '<span class="badge ng" style="margin-left:8px">≠ 0 ✗ Error</span>'}
+      </div>
+    </div>
+    <div class="conclusion-box ${accepted?'':'reject'}">
+      <h4>${accepted ? '✓ ACCEPT DATA' : '✗ REJECT DATA'}</h4>
+      <p>${accepted ? 'Komplemen hasil = 00000000 → Data valid.' : 'Komplemen hasil ≠ 00000000 → Data mengalami error.'}</p>
+    </div>
+  </div>`;
+}
+
+// ===== HAMMING CODE ENGINE =====
+/*
+  Hamming(12,8): 8 data bits → 12-bit codeword
+  Bit positions 1-12 (1-indexed, from RIGHT):
+    Pos 1  = P1 (check bit, covers positions with bit0 of index = 1: 1,3,5,7,9,11)
+    Pos 2  = P2 (covers bit1: 2,3,6,7,10,11)
+    Pos 3  = D1
+    Pos 4  = P4 (covers bit2: 4,5,6,7,12)
+    Pos 5  = D2
+    Pos 6  = D3
+    Pos 7  = D4
+    Pos 8  = P8 (covers bit3: 8,9,10,11,12)
+    Pos 9  = D5
+    Pos 10 = D6
+    Pos 11 = D7
+    Pos 12 = D8
+
+  P1 = XOR of data bits at positions: 3,5,7,9,11 → D1,D2,D4,D5,D7
+  P2 = XOR of data bits at positions: 3,6,7,10,11 → D1,D3,D4,D6,D7
+  P4 = XOR of data bits at positions: 5,6,7,12 → D2,D3,D4,D8
+  P8 = XOR of data bits at positions: 9,10,11,12 → D5,D6,D7,D8
+*/
+
+function resetHamming() {
+  document.getElementById('ham-data').value = '10110101';
+  document.getElementById('ham-rx').value = '';
+  document.getElementById('sim-output-zone').innerHTML = '';
+}
+
+function runHamming() {
+  const dataIn = document.getElementById('ham-data').value.replace(/[^01]/g,'').slice(0,8).padStart(8,'0');
+  const rxIn = document.getElementById('ham-rx').value.replace(/[^01]/g,'');
+
+  // Parse data bits D8..D1 (input is MSB first, so dataIn[0]=D8, dataIn[7]=D1)
+  const D = {};
+  for (let i = 1; i <= 8; i++) {
+    D[i] = parseInt(dataIn[8 - i]); // D1 = dataIn[7], D8 = dataIn[0]
+  }
+
+  // Calculate parity bits
+  const P1 = D[1] ^ D[2] ^ D[4] ^ D[5] ^ D[7];  // positions 3,5,7,9,11
+  const P2 = D[1] ^ D[3] ^ D[4] ^ D[6] ^ D[7];  // positions 3,6,7,10,11
+  const P4 = D[2] ^ D[3] ^ D[4] ^ D[8];           // positions 5,6,7,12
+  const P8 = D[5] ^ D[6] ^ D[7] ^ D[8];           // positions 9,10,11,12
+
+  // Build 12-bit codeword (index 0 = position 12, index 11 = position 1)
+  // pos: 12=D8, 11=D7, 10=D6, 9=D5, 8=P8, 7=D4, 6=D3, 5=D2, 4=P4, 3=D1, 2=P2, 1=P1
+  const block12 = [D[8], D[7], D[6], D[5], P8, D[4], D[3], D[2], P4, D[1], P2, P1];
+  const encoded = block12.join('');
+
+  // RX block
+  let rxBlock = rxIn ? rxIn.padStart(12,'0').slice(-12).split('').map(Number) : [...block12];
+
+  // Extract received data bits and parity bits from rxBlock
+  // rxBlock[0]=pos12=D8, rxBlock[1]=pos11=D7, rxBlock[2]=pos10=D6, rxBlock[3]=pos9=D5
+  // rxBlock[4]=pos8=P8_rx, rxBlock[5]=pos7=D4, rxBlock[6]=pos6=D3, rxBlock[7]=pos5=D2
+  // rxBlock[8]=pos4=P4_rx, rxBlock[9]=pos3=D1, rxBlock[10]=pos2=P2_rx, rxBlock[11]=pos1=P1_rx
+  const rD = { 1: rxBlock[9], 2: rxBlock[7], 3: rxBlock[6], 4: rxBlock[5],
+               5: rxBlock[3], 6: rxBlock[2], 7: rxBlock[1], 8: rxBlock[0] };
+  const rP1 = rxBlock[11], rP2 = rxBlock[10], rP4 = rxBlock[8], rP8 = rxBlock[4];
+
+  // Recalculate parity from received data bits
+  const cP1 = rD[1] ^ rD[2] ^ rD[4] ^ rD[5] ^ rD[7];
+  const cP2 = rD[1] ^ rD[3] ^ rD[4] ^ rD[6] ^ rD[7];
+  const cP4 = rD[2] ^ rD[3] ^ rD[4] ^ rD[8];
+  const cP8 = rD[5] ^ rD[6] ^ rD[7] ^ rD[8];
+
+  // Syndrome = recalculated XOR received parity
+  const S1 = cP1 ^ rP1;
+  const S2 = cP2 ^ rP2;
+  const S4 = cP4 ^ rP4;
+  const S8 = cP8 ^ rP8;
+  const syndrome = S8 * 8 + S4 * 4 + S2 * 2 + S1;
+
+  let corrected = [...rxBlock];
+  let errorMsg = '';
+  if (syndrome === 0) {
+    errorMsg = 'Syndrome = 0000 → Tidak ada error terdeteksi.';
+  } else {
+    // syndrome gives the position (1-indexed from right)
+    // block index = 12 - syndrome
+    corrected[12 - syndrome] ^= 1;
+    errorMsg = `Syndrome = ${S8}${S4}${S2}${S1} (desimal: ${syndrome}) → Error di posisi bit ke-<strong>${syndrome}</strong>. Bit dikoreksi.`;
+  }
+
+  const out = document.getElementById('sim-output-zone');
+  out.innerHTML = `
+  <div class="steps-wrap fade-in">
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 1</div>
+      <div class="step-title">Distribusi Data Bit</div>
+      <div class="step-body">
+        Input: <code>${dataIn}</code> (D8=MSB … D1=LSB)<br>
+        D1=${D[1]}, D2=${D[2]}, D3=${D[3]}, D4=${D[4]}, D5=${D[5]}, D6=${D[6]}, D7=${D[7]}, D8=${D[8]}
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 2</div>
+      <div class="step-title">Hitung Parity Bits (XOR Even Parity)</div>
+      <div class="step-body">
+        <code>P1 = D1⊕D2⊕D4⊕D5⊕D7 = ${D[1]}⊕${D[2]}⊕${D[4]}⊕${D[5]}⊕${D[7]} = <strong>${P1}</strong></code><br>
+        <code>P2 = D1⊕D3⊕D4⊕D6⊕D7 = ${D[1]}⊕${D[3]}⊕${D[4]}⊕${D[6]}⊕${D[7]} = <strong>${P2}</strong></code><br>
+        <code>P4 = D2⊕D3⊕D4⊕D8 = ${D[2]}⊕${D[3]}⊕${D[4]}⊕${D[8]} = <strong>${P4}</strong></code><br>
+        <code>P8 = D5⊕D6⊕D7⊕D8 = ${D[5]}⊕${D[6]}⊕${D[7]}⊕${D[8]} = <strong>${P8}</strong></code>
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">TX — Langkah 3</div>
+      <div class="step-title">Codeword 12-bit yang Dikirim</div>
+      <div class="step-body">
+        <table class="data-table" style="margin-bottom:8px">
+          <tr><th>Pos (kanan→kiri)</th>${[1,2,3,4,5,6,7,8,9,10,11,12].map(p=>`<th>${p}</th>`).join('')}</tr>
+          <tr><td>Jenis</td>${['P1','P2','D1','P4','D2','D3','D4','P8','D5','D6','D7','D8'].map(l=>`<td style="font-family:var(--mono);font-size:12px">${l}</td>`).join('')}</tr>
+          <tr><td>Bit</td>${[...block12].reverse().map(b=>`<td><div class="bit ${b?'b1':'b0'}" style="width:22px;height:22px;font-size:12px;display:inline-flex;align-items:center;justify-content:center">${b}</div></td>`).join('')}</tr>
+        </table>
+        Codeword (pos12→pos1): <code style="color:var(--green);font-size:15px">${encoded}</code>
+      </div>
+    </div>
+    <div class="step-block">
+      <div class="step-num">RX — Langkah 4</div>
+      <div class="step-title">Frame Diterima: <code>${rxBlock.join('')}</code></div>
+      <div class="step-body">
+        Hitung ulang parity dari data yang diterima:<br>
+        <code>P1' = ${rD[1]}⊕${rD[2]}⊕${rD[4]}⊕${rD[5]}⊕${rD[7]} = ${cP1}</code> &nbsp;vs P1_rx = ${rP1} → S1 = ${S1}<br>
+        <code>P2' = ${rD[1]}⊕${rD[3]}⊕${rD[4]}⊕${rD[6]}⊕${rD[7]} = ${cP2}</code> &nbsp;vs P2_rx = ${rP2} → S2 = ${S2}<br>
+        <code>P4' = ${rD[2]}⊕${rD[3]}⊕${rD[4]}⊕${rD[8]} = ${cP4}</code> &nbsp;vs P4_rx = ${rP4} → S4 = ${S4}<br>
+        <code>P8' = ${rD[5]}⊕${rD[6]}⊕${rD[7]}⊕${rD[8]} = ${cP8}</code> &nbsp;vs P8_rx = ${rP8} → S8 = ${S8}<br><br>
+        <strong>Syndrome Word: S8 S4 S2 S1 = ${S8}${S4}${S2}${S1}</strong> (desimal = ${syndrome})
+      </div>
+    </div>
+    <div class="step-block ${syndrome===0?'success':'warn'}">
+      <div class="step-num">RX — Langkah 5</div>
+      <div class="step-title">Analisis Syndrome</div>
+      <div class="step-body">${errorMsg}<br>${syndrome ? `Codeword setelah koreksi: <code style="color:var(--green)">${corrected.join('')}</code>` : `Codeword valid: <code style="color:var(--green)">${rxBlock.join('')}</code>`}</div>
+    </div>
+    <div class="conclusion-box ${syndrome===0?'':''}">
+      <h4>${syndrome === 0 ? '✓ DATA VALID — Tidak Ada Error' : `⚠ ERROR DI POSISI ${syndrome} — DIKOREKSI OTOMATIS`}</h4>
+      <p>${syndrome === 0 ? 'Syndrome Word = 0000 → Semua bit benar.' : `Bit posisi ke-${syndrome} di-flip. Codeword terkoreksi: ${corrected.join('')}`}</p>
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
